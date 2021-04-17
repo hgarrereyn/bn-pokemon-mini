@@ -160,11 +160,11 @@ def load_op(op, immdata, addr):
     elif op == '#{0}h':
         # uint8_t
         v = immdata[0]
-        return ([tN(hex(v), v)], lambda il: il.const(1,v), 1)
+        return ([tA(hex(v), v)], lambda il: il.const(1,v), 1)
     elif op == '#{1}h':
         # uint16_t
         v = immdata[0] + (immdata[1] << 8)
-        return ([tN(hex(v), v)], lambda il: il.const(2,v), 2)
+        return ([tA(hex(v), v)], lambda il: il.const(2,v), 2)
     elif op == '[{1}h]':
         v = immdata[0] + (immdata[1] << 8)
         return ([
