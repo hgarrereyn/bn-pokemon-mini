@@ -17,7 +17,7 @@ def tT(x): return InstructionTextToken(InstructionTextTokenType.TextToken, x)
 def tN(x,d): return InstructionTextToken(InstructionTextTokenType.IntegerToken, x, d)
 
 REGS_1 = ['A','B','H','L','BR','NB','CB','EP','XP','YP','SC']
-REGS_2 = ['BA','HL','IX','IY','SP']
+REGS_2 = ['BA','HL','IX','IY','SP','IP']
 
 # LLIL branching util
 
@@ -127,6 +127,27 @@ def set_op(op, immdata, addr):
             ),
             vv
         ), 1)
+    elif op == '[IX+{2}h]':
+        v = s8(immdata[0])
+        return ([
+            tM('['), tR('IX'), tS('+') if v > 0 else tS('-'), tN(hex(abs(v)), abs(v)), tE(']'),
+        ], lambda il, vv: il.store(1, 
+            il.add(2,
+                il.reg(2, 'IX'),
+                il.const(2, v)
+            ),
+            vv
+        ), 1)
+    elif op == '[IY+L]':
+        return ([
+            tM('['), tR('IX'), tS('+'), tR('L'), tE(']'),
+        ], lambda il, vv: il.store(1, 
+            il.add(2,
+                il.reg(2, 'IY'),
+                il.zero_extend(2, il.reg(1, 'L'))
+            ),
+            vv
+        ), 1)
     else:
         return ([tT(op)], None)
 
@@ -144,6 +165,11 @@ def load_op(op, immdata, addr):
         # uint16_t
         v = immdata[0] + (immdata[1] << 8)
         return ([tN(hex(v), v)], lambda il: il.const(2,v), 2)
+    elif op == '[{1}h]':
+        v = immdata[0] + (immdata[1] << 8)
+        return ([
+            tM('['), tN(hex(v), v), tE(']')
+        ], lambda il: il.load(1, il.const(2,v)), 1)
     elif op == '#{4}h':
         # second uint8_t
         v = immdata[1]
@@ -155,6 +181,16 @@ def load_op(op, immdata, addr):
         ], lambda il: il.load(1, 
             il.add(2,
                 il.reg(2, 'IX'),
+                il.const(2, v)
+            )
+        ), 1)
+    elif op == '[IY+{2}h]':
+        v = s8(immdata[0])
+        return ([
+            tM('['), tR('IY'), tS('+') if v > 0 else tS('-'), tN(hex(abs(v)), abs(v)), tE(']'),
+        ], lambda il: il.load(1, 
+            il.add(2,
+                il.reg(2, 'IY'),
                 il.const(2, v)
             )
         ), 1)
@@ -266,57 +302,33 @@ f_or = binop('OR', 'or_expr')
 f_and = binop('AND', 'and_expr')
 f_xor = binop('XOR', 'xor_expr')
 
-# def add(instr, dat, addr):
-#     txt, code, length = instr
-#     immdata = dat[len(code):]
+def ex(instr, dat, addr):
+    txt, code, length = instr
+    immdata = dat[len(code):]
 
-#     info = InstructionInfo()
-#     info.length = length
+    info = InstructionInfo()
+    info.length = length
 
-#     dst, src = txt.split()[1].split(',')
+    dst, src = txt.split()[1].split(',')
 
-#     p_dst_w = set_op(dst, immdata, addr)
-#     p_dst_r = load_op(dst, immdata, addr)
-#     p_src_r = load_op(src, immdata, addr)
+    p_dst_w = set_op(dst, immdata, addr)
+    p_dst_r = load_op(dst, immdata, addr)
+    p_src_w = set_op(src, immdata, addr)
+    p_src_r = load_op(src, immdata, addr)
 
-#     fn = None
-#     if p_dst_r[1] is not None and p_src_r[1] is not None and p_dst_w[1] is not None:
-#         fn = [lambda il: il.append(p_dst_w[1](il, il.add(p_dst_r[2], 
-#             p_dst_r[1](il),
-#             p_src_r[1](il)
-#         )))]
+    fn = None
+    if p_dst_r[1] is not None and p_src_r[1] is not None and p_dst_w[1] is not None and p_src_w[1] is not None:
+        fn = [
+            lambda il: il.append(p_dst_w[1](il, p_src_r[1](il))),
+            lambda il: il.append(p_src_w[1](il, p_dst_r[1](il)))
+        ]
 
-#     return (
-#         [tT('ADD'), tS(' '), *p_dst_w[0], tS(', '), *p_src_r[0]],
-#         info,
-#         fn
-#     )
+    return (
+        [tT('EX'), tS(' '), *p_dst_w[0], tS(', '), *p_src_r[0]],
+        info,
+        fn
+    )
 
-# def sub(instr, dat, addr):
-#     txt, code, length = instr
-#     immdata = dat[len(code):]
-
-#     info = InstructionInfo()
-#     info.length = length
-
-#     dst, src = txt.split()[1].split(',')
-
-#     p_dst_w = set_op(dst, immdata, addr)
-#     p_dst_r = load_op(dst, immdata, addr)
-#     p_src_r = load_op(src, immdata, addr)
-
-#     fn = None
-#     if p_dst_r[1] is not None and p_src_r[1] is not None and p_dst_w[1] is not None:
-#         fn = [lambda il: il.append(p_dst_w[1](il, il.sub(p_dst_r[2], 
-#             p_dst_r[1](il),
-#             p_src_r[1](il)
-#         )))]
-
-#     return (
-#         [tT('SUB'), tS(' '), *p_dst_w[0], tS(', '), *p_src_r[0]],
-#         info,
-#         fn
-#     )
 
 def inc(instr, dat, addr):
     txt, code, length = instr
@@ -372,21 +384,42 @@ def jrl(instr, dat, addr):
     txt, code, length = instr
     immdata = dat[len(code):]
 
-    if txt.split()[1] != '{3}':
-        return None
+    ops = txt.split()[1].split(',')
 
-    rel = immdata[0] + (immdata[1] << 8)
-    target = (addr + rel + length - 1) & 0xffff
+    if len(ops) == 1:
+        if ops[0] != '{3}':
+            return None
 
-    info = InstructionInfo()
-    info.length = length
-    info.add_branch(BranchType.UnconditionalBranch, target)
+        rel = immdata[0] + (immdata[1] << 8)
+        target = (addr + rel + length - 1) & 0xffff
 
-    return (
-        [tT('JRL'), tS(' '), tA(hex(target), target)],
-        info,
-        [lambda il: il.append(il.jump(il.const_pointer(2, target)))]
-    )
+        info = InstructionInfo()
+        info.length = length
+        info.add_branch(BranchType.UnconditionalBranch, target)
+
+        return (
+            [tT('JRL'), tS(' '), tA(hex(target), target)],
+            info,
+            [lambda il: il.append(il.jump(il.const_pointer(2, target)))]
+        )
+    else:
+        # Conditional
+        if ops[1] != '{3}':
+            return None
+
+        rel = immdata[0] + (immdata[1] << 8)
+        target = (addr + rel + length - 1) & 0xffff
+
+        info = InstructionInfo()
+        info.length = length
+        info.add_branch(BranchType.TrueBranch, target)
+        info.add_branch(BranchType.FalseBranch, addr + length)
+
+        return (
+            [tT('JRL'), tS(' '), tT(ops[0]), tS(', '), tA(hex(target), target)],
+            info,
+            [lambda il: il_branch(il, il.flag(ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
+        )
 
 def jrs(instr, dat, addr):
     txt, code, length = instr
@@ -435,6 +468,55 @@ def jrs(instr, dat, addr):
             info,
             [lambda il: il_branch(il, il.flag(ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
         )
+
+def djr(instr, dat, addr):
+    txt, code, length = instr
+    immdata = dat[len(code):]
+
+    rel = immdata[0]
+    if rel & 0x80:
+        rel -= 0x100
+    
+    target = (addr + rel + length - 1) & 0xffff
+
+    info = InstructionInfo()
+    info.length = length
+    info.add_branch(BranchType.TrueBranch, target)
+    info.add_branch(BranchType.FalseBranch, addr + length)
+
+    return (
+        [tT('DJR'), tS(' '), tA(hex(target), target)],
+        info,
+        [
+            lambda il: il_branch(
+                il,
+                il.compare_not_equal(1, il.reg(1, 'B'), il.const(1, 0)),
+                il.const_pointer(2, target),
+                il.const_pointer(2, addr + length))
+        ]
+    )
+
+def f_int(instr, dat, addr):
+    txt, code, length = instr
+    immdata = dat[len(code):]
+
+    op = txt.split()[1]
+
+    if op != '[{0}h]':
+        return None
+
+    rel = immdata[0]
+    target = rel & 0xff
+
+    info = InstructionInfo()
+    info.length = length
+    info.add_branch(BranchType.CallDestination, target)
+
+    return (
+        [tT('INT'), tS(' '), tA(hex(target), target)],
+        info,
+        [lambda il: il.append(il.jump(il.const_pointer(2, target)))]
+    )
 
 def carl(instr, dat, addr):
     txt, code, length = instr
@@ -579,6 +661,9 @@ def decode(dat, addr):
     elif op == 'INC': return inc(instr, dat, addr)
     elif op == 'DEC': return dec(instr, dat, addr)
     elif op == 'CP': return cp(instr, dat, addr)
+    elif op == 'EX': return ex(instr, dat, addr)
+    elif op == 'INT': return f_int(instr, dat, addr)
+    elif op == 'DJR': return djr(instr, dat, addr)
 
     return ([tT(txt)], info, None)
 

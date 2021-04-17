@@ -807,10 +807,10 @@ instructions = [
     ["CARL Z,{3}h", ["EA"], 3],
     ["CARL NZ,{3}h", ["EB"], 3],
 
-    ["JRL C,{3}h", ["EC"], 3],
-    ["JRL NC,{3}h", ["ED"], 3],
-    ["JRL Z,{3}h", ["EE"], 3],
-    ["JRL NZ,{3}h", ["EF"], 3],
+    ["JRL C,{3}", ["EC"], 3],
+    ["JRL NC,{3}", ["ED"], 3],
+    ["JRL Z,{3}", ["EE"], 3],
+    ["JRL NZ,{3}", ["EF"], 3],
 
     ["CARS {2}", ["F0"], 2],
 

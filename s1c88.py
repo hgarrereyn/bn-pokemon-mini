@@ -13,11 +13,11 @@ class S1C88(Architecture):
 
     regs = {
         'BA': RegisterInfo('BA', 2),
-		'A': RegisterInfo('A', 1, 0),
-        'B': RegisterInfo('B', 1, 1),
+		'A': RegisterInfo('BA', 1, 0),
+        'B': RegisterInfo('BA', 1, 1),
         'HL': RegisterInfo('HL', 2),
-		'L': RegisterInfo('L', 1, 0),
-        'H': RegisterInfo('H', 1, 1),
+		'L': RegisterInfo('HL', 1, 0),
+        'H': RegisterInfo('HL', 1, 1),
         'IX': RegisterInfo('IX', 2),
         'IY': RegisterInfo('IY', 2),
         'PC': RegisterInfo('PC', 2),
@@ -26,8 +26,9 @@ class S1C88(Architecture):
         'NB': RegisterInfo('NB', 1),
         'CB': RegisterInfo('CB', 1),
         'EP': RegisterInfo('EP', 1),
-        'XP': RegisterInfo('XP', 1),
-        'YP': RegisterInfo('YP', 1),
+        'IP': RegisterInfo('YP', 2),
+        'XP': RegisterInfo('XP', 1, 0),
+        'YP': RegisterInfo('YP', 1, 1),
         'SC': RegisterInfo('SC', 1),
     }
     stack_pointer = 'SP'
