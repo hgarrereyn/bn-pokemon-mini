@@ -1,8 +1,8 @@
 
 from binaryninja.function import RegisterInfo, InstructionInfo, InstructionTextToken
-from binaryninja.enums import InstructionTextTokenType, BranchType, LowLevelILOperation
+from binaryninja.enums import InstructionTextTokenType, BranchType, LowLevelILOperation, LowLevelILFlagCondition
 from binaryninja.architecture import Architecture
-from binaryninja.lowlevelil import LowLevelILLabel
+from binaryninja.lowlevelil import LowLevelILLabel, LowLevelILFunction
 
 from .minidis2_instr import instructions
 
@@ -18,6 +18,22 @@ def tN(x,d): return InstructionTextToken(InstructionTextTokenType.IntegerToken, 
 
 REGS_1 = ['A','B','H','L','BR','NB','CB','EP','XP','YP','SC']
 REGS_2 = ['BA','HL','IX','IY','SP','IP']
+
+def make_condition(il: LowLevelILFunction, op: str):
+    return {
+        "c": il.flag_condition(LowLevelILFlagCondition.LLFC_UGE),
+        "nc": il.flag_condition(LowLevelILFlagCondition.LLFC_ULT),
+        "z": il.flag_condition(LowLevelILFlagCondition.LLFC_E),
+        "nz": il.flag_condition(LowLevelILFlagCondition.LLFC_NE),
+        "lt": il.flag_condition(LowLevelILFlagCondition.LLFC_SLT),
+        "le": il.flag_condition(LowLevelILFlagCondition.LLFC_SLE),
+        "gt": il.flag_condition(LowLevelILFlagCondition.LLFC_SGT),
+        "ge": il.flag_condition(LowLevelILFlagCondition.LLFC_SGE),
+        "v": il.flag_condition(LowLevelILFlagCondition.LLFC_O),
+        "nv": il.flag_condition(LowLevelILFlagCondition.LLFC_NO),
+        "p": il.flag_condition(LowLevelILFlagCondition.LLFC_POS),
+        "m": il.flag_condition(LowLevelILFlagCondition.LLFC_NEG),
+    }[op]
 
 # LLIL branching util
 
@@ -418,7 +434,7 @@ def jrl(instr, dat, addr):
         return (
             [tT('JRL'), tS(' '), tT(ops[0]), tS(', '), tA(hex(target), target)],
             info,
-            [lambda il: il_branch(il, il.flag(ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
+            [lambda il: il_branch(il, make_condition(il, ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
         )
 
 def jrs(instr, dat, addr):
@@ -466,7 +482,7 @@ def jrs(instr, dat, addr):
         return (
             [tT('JRS'), tS(' '), tT(ops[0]), tS(', '), tA(hex(target), target)],
             info,
-            [lambda il: il_branch(il, il.flag(ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
+            [lambda il: il_branch(il, make_condition(il, ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
         )
 
 def djr(instr, dat, addr):
