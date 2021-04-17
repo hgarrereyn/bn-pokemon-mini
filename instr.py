@@ -102,7 +102,7 @@ def set_op(op, immdata, addr):
         r = immdata[0] + (immdata[1] << 8)
         fn = lambda il,v: il.store(1, il.const(2, r), v)
         return ([
-            tM('['), tN(hex(r), r), tE(']')
+            tM('['), tA(hex(r), r), tE(']')
         ], fn)
     elif op == '[HL]':
         return ([
@@ -168,7 +168,7 @@ def load_op(op, immdata, addr):
     elif op == '[{1}h]':
         v = immdata[0] + (immdata[1] << 8)
         return ([
-            tM('['), tN(hex(v), v), tE(']')
+            tM('['), tA(hex(v), v), tE(']')
         ], lambda il: il.load(1, il.const(2,v)), 1)
     elif op == '#{4}h':
         # second uint8_t
