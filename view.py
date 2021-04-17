@@ -25,7 +25,15 @@ class S1C88View(BinaryView):
 
 
     def init(self):
+        # RAM
+        self.add_auto_segment(0x1000, 0x1000, 0, 0x1000, SegmentFlag.SegmentReadable | SegmentFlag.SegmentWritable)
+        # Hardware IO Registers
+        self.add_auto_segment(0x2000, 0x100, 0, 0x100, SegmentFlag.SegmentReadable | SegmentFlag.SegmentWritable)
+
+        # Cartridge memory
         self.add_auto_segment(0x2100, 0x1fdeff, 0x2100, 0x1fdeff, SegmentFlag.SegmentReadable|SegmentFlag.SegmentExecutable)
+
+        # Cartridge memory mirrors
         self.add_auto_segment(0x200000, 0x1fffff, 0x2100, 0x1fdeff, SegmentFlag.SegmentReadable|SegmentFlag.SegmentExecutable)
         self.add_auto_segment(0x400000, 0x1fffff, 0x2100, 0x1fdeff, SegmentFlag.SegmentReadable|SegmentFlag.SegmentExecutable)
         self.add_auto_segment(0x600000, 0x1fffff, 0x2100, 0x1fdeff, SegmentFlag.SegmentReadable|SegmentFlag.SegmentExecutable)
