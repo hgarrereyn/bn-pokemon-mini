@@ -12,7 +12,7 @@ class S1C88(Architecture):
     max_instr_length = 8
 
     regs = {
-        'AB': RegisterInfo('AB', 2),
+        'BA': RegisterInfo('BA', 2),
 		'A': RegisterInfo('A', 1, 0),
         'B': RegisterInfo('B', 1, 1),
         'HL': RegisterInfo('HL', 2),
@@ -31,6 +31,8 @@ class S1C88(Architecture):
         'SC': RegisterInfo('SC', 1),
     }
     stack_pointer = 'SP'
+
+    flags = ['c', 'nc', 'z', 'nz', 'lt', 'le', 'gt', 'ge', 'v', 'nv', 'p', 'm']
 
     def get_instruction_info(self, data, addr):
 

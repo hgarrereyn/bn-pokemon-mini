@@ -16,34 +16,15 @@ def tA(x,d): return InstructionTextToken(InstructionTextTokenType.PossibleAddres
 def tT(x): return InstructionTextToken(InstructionTextTokenType.TextToken, x)
 def tN(x,d): return InstructionTextToken(InstructionTextTokenType.IntegerToken, x, d)
 
-
-def u32(dat):
-    x = 0
-    x += dat[0]
-    x += (dat[1] << 8)
-    x += (dat[2] << 16)
-    x += (dat[3] << 24)
-    return x
-
-def u16(dat):
-    x = 0
-    x += dat[0]
-    x += (dat[1] << 8)
-    return x
-
-def bits(x,hi,lo):
-    '''bits hi to lo inclusive'''
-    return (x >> lo) & ((2 ** (hi - lo + 1)) - 1)
-
-def ext(x,n):
-    '''sign extend x as an "n" bit number'''
-    if (x >> (n-1)) & 1:
-        # invert
-        return -((2**n) - x)
-    else:
-        return x
+REGS_1 = ['A','B','H','L','BR','NB','CB','EP','XP','YP','SC']
+REGS_2 = ['BA','HL','IX','IY','SP']
 
 # LLIL branching util
+
+def s8(v):
+    if v & 0x80:
+        v -= 0x100
+    return v
 
 def il_jump(il, dest, is_call=False):
 
@@ -105,12 +86,11 @@ def cat2(il, a, b):
         b
     )
 
-
 def set_op(op, immdata, addr):
     # returns (text, il)
-    if op in ['A','B','H','L','BR','NB','CB','EP','XP','YP','SC']:
+    if op in REGS_1:
         return ([tR(op)], lambda il,v: il.set_reg(1, op, v))
-    elif op in ['AB','HL','IX','IY','SP']:
+    elif op in REGS_2:
         return ([tR(op)], lambda il,v: il.set_reg(2, op, v))
     elif op == '[BR:{0}h]':
         r = immdata[0]
@@ -118,29 +98,45 @@ def set_op(op, immdata, addr):
         return ([
             tM('['), tR('BR'), tS(':'), tN(hex(r), r), tE(']')
         ], fn)
+    elif op == '[{1}h]':
+        r = immdata[0] + (immdata[1] << 8)
+        fn = lambda il,v: il.store(1, il.const(2, r), v)
+        return ([
+            tM('['), tN(hex(r), r), tE(']')
+        ], fn)
     else:
         return ([tT(op)], None)
 
 def load_op(op, immdata, addr):
-    # returns (text, il)
-    if op in ['A','B','H','L','BR','NB','CB','EP','XP','YP','SC']:
-        return ([tR(op)], lambda il: il.reg(1, op))
-    elif op in ['AB','HL','IX','IY','SP']:
-        return ([tR(op)], lambda il: il.reg(2, op))
+    # returns (text, il, size)
+    if op in REGS_1:
+        return ([tR(op)], lambda il: il.reg(1, op), 1)
+    elif op in REGS_2:
+        return ([tR(op)], lambda il: il.reg(2, op), 2)
     elif op == '#{0}h':
         # uint8_t
         v = immdata[0]
-        return ([tN(hex(v), v)], lambda il: il.const(1,v))
+        return ([tN(hex(v), v)], lambda il: il.const(1,v), 1)
     elif op == '#{1}h':
         # uint16_t
         v = immdata[0] + (immdata[1] << 8)
-        return ([tN(hex(v), v)], lambda il: il.const(2,v))
+        return ([tN(hex(v), v)], lambda il: il.const(2,v), 2)
     elif op == '#{4}h':
         # second uint8_t
         v = immdata[1]
-        return ([tN(hex(v), v)], lambda il: il.const(1,v))
+        return ([tN(hex(v), v)], lambda il: il.const(1,v), 1)
+    elif op == '[IX+{2}h]':
+        v = s8(immdata[0])
+        return ([
+            tM('['), tR('IX'), tS('+') if v > 0 else tS('-'), tN(hex(abs(v)), abs(v)), tE(']'),
+        ], lambda il: il.load(1, 
+            il.add(2,
+                il.reg(2, 'IX'),
+                il.const(2, v)
+            )
+        ), 1)
     else:
-        return ([tT(op)], lambda il: il.const(1,0))
+        return ([tT(op)], lambda il: il.const(1,0), 1)
 
 
 def load(instr, dat, addr):
@@ -185,6 +181,54 @@ def jrl(instr, dat, addr):
         [lambda il: il.append(il.jump(il.const_pointer(2, target)))]
     )
 
+def jrs(instr, dat, addr):
+    txt, code, length = instr
+    immdata = dat[len(code):]
+
+    ops = txt.split()[1].split(',')
+
+    if len(ops) == 1:
+        # JRS {2}
+        if ops[0] != '{2}':
+            return None
+
+        rel = immdata[0]
+        if rel & 0x80:
+            rel -= 0x100
+        
+        target = (addr + rel + length - 1) & 0xffff
+
+        info = InstructionInfo()
+        info.length = length
+        info.add_branch(BranchType.UnconditionalBranch, target)
+
+        return (
+            [tT('JRS'), tS(' '), tA(hex(target), target)],
+            info,
+            [lambda il: il.append(il.jump(il.const_pointer(2, target)))]
+        )
+    else:
+        # Conditional
+        if ops[1] != '{2}':
+            return None
+
+        rel = immdata[0]
+        if rel & 0x80:
+            rel -= 0x100
+        
+        target = (addr + rel + length - 1) & 0xffff
+
+        info = InstructionInfo()
+        info.length = length
+        info.add_branch(BranchType.TrueBranch, target)
+        info.add_branch(BranchType.FalseBranch, addr + length)
+
+        return (
+            [tT('JRS'), tS(' '), tT(ops[0]), tS(', '), tA(hex(target), target)],
+            info,
+            [lambda il: il_branch(il, il.flag(ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
+        )
+
 def carl(instr, dat, addr):
     txt, code, length = instr
     immdata = dat[len(code):]
@@ -215,7 +259,23 @@ def rete(instr, dat, addr):
     return (
         [tT('RETE')],
         info,
-        [lambda il: il.append(il.unimplemented())]
+        [lambda il: il.append(il.ret(il.pop(2)))]
+    )
+
+def push(instr, dat, addr):
+    txt, code, length = instr
+    immdata = dat[len(code):]
+
+    op = txt.split()[1]
+    p_op = load_op(op, immdata, addr)
+
+    info = InstructionInfo()
+    info.length = length
+
+    return (
+        [tT('PUSH'), tS(' '), *p_op[0]],
+        info,
+        [lambda il: il.append(il.push(p_op[2], p_op[1](il)))]
     )
 
 def decode(dat, addr):
@@ -246,8 +306,10 @@ def decode(dat, addr):
 
     if op == 'LD': return load(instr, dat, addr)
     elif op == 'JRL': return jrl(instr, dat, addr)
+    elif op == 'JRS': return jrs(instr, dat, addr)
     elif op == 'CARL': return carl(instr, dat, addr)
     elif op == 'RETE': return rete(instr, dat, addr)
+    elif op == 'PUSH': return push(instr, dat, addr)
 
     return ([tT(txt)], info, None)
 
