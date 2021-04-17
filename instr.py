@@ -283,7 +283,7 @@ def cp(instr, dat, addr):
         fn
     )
 
-def binop(op, il_op):
+def binop(op, il_op, flags = ""):
     def _fn(instr, dat, addr):
         txt, code, length = instr
         immdata = dat[len(code):]
@@ -301,7 +301,8 @@ def binop(op, il_op):
         if p_dst_r[1] is not None and p_src_r[1] is not None and p_dst_w[1] is not None:
             fn = [lambda il: il.append(p_dst_w[1](il, getattr(il, il_op)(p_dst_r[2], 
                 p_dst_r[1](il),
-                p_src_r[1](il)
+                p_src_r[1](il),
+                flags = flags if flags else None
             )))]
 
         return (
@@ -312,11 +313,11 @@ def binop(op, il_op):
 
     return _fn
 
-add = binop('ADD', 'add')
-sub = binop('SUB', 'sub')
-f_or = binop('OR', 'or_expr')
-f_and = binop('AND', 'and_expr')
-f_xor = binop('XOR', 'xor_expr')
+add = binop('ADD', 'add', flags="zcvn")
+sub = binop('SUB', 'sub', flags="zcvn")
+f_or = binop('OR', 'or_expr', flags="zn")
+f_and = binop('AND', 'and_expr', flags="zn")
+f_xor = binop('XOR', 'xor_expr', flags="zn")
 
 def ex(instr, dat, addr):
     txt, code, length = instr
@@ -362,7 +363,8 @@ def inc(instr, dat, addr):
     if p_dst_r[1] is not None and p_dst_w[1] is not None:
         fn = [lambda il: il.append(p_dst_w[1](il, il.add(p_dst_r[2], 
             p_dst_r[1](il),
-            il.const(p_dst_r[2], 1)
+            il.const(p_dst_r[2], 1),
+            flags="z",
         )))]
 
     return (
@@ -387,7 +389,8 @@ def dec(instr, dat, addr):
     if p_dst_r[1] is not None and p_dst_w[1] is not None:
         fn = [lambda il: il.append(p_dst_w[1](il, il.sub(p_dst_r[2], 
             p_dst_r[1](il),
-            il.const(p_dst_r[2], 1)
+            il.const(p_dst_r[2], 1),
+            flags="z",
         )))]
 
     return (

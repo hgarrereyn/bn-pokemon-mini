@@ -67,9 +67,10 @@ class S1C88(Architecture):
     }
 
     flag_write_types = [
+        ''
         "*",
         "zcvn",
-        "nz",
+        "zn",
         "z",
         "zcn",
     ]
@@ -77,7 +78,7 @@ class S1C88(Architecture):
     flags_written_by_flag_write_type = {
 		"*": ['z', 'c', 'v', 'n', 'd', 'u', 'i0', 'i1'],
         "zcvn": ["z", "c", "v", "n"],
-        "nz": ["n", "z"],
+        "zn": ["z", "n"],
         "z": ["z"],
         "zcn": ["z", "c", "n"],
 	}
