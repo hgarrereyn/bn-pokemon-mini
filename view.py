@@ -13,8 +13,6 @@ class S1C88View(BinaryView):
 
     @classmethod
     def is_valid_for_data(self, data: BinaryView):
-        print(type(data))
-
         header = data.read(0x21A4,24)
         return header == b"NINTENDOMPKMminipokemon\x00"
 

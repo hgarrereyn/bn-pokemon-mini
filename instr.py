@@ -1,8 +1,8 @@
 
 from binaryninja.function import RegisterInfo, InstructionInfo, InstructionTextToken
-from binaryninja.enums import InstructionTextTokenType, BranchType, LowLevelILOperation
+from binaryninja.enums import InstructionTextTokenType, BranchType, LowLevelILOperation, LowLevelILFlagCondition
 from binaryninja.architecture import Architecture
-from binaryninja.lowlevelil import LowLevelILLabel
+from binaryninja.lowlevelil import LowLevelILLabel, LowLevelILFunction
 
 from .minidis2_instr import instructions
 
@@ -18,6 +18,22 @@ def tN(x,d): return InstructionTextToken(InstructionTextTokenType.IntegerToken, 
 
 REGS_1 = ['A','B','H','L','BR','NB','CB','EP','XP','YP','SC']
 REGS_2 = ['BA','HL','IX','IY','SP','IP']
+
+def make_condition(il: LowLevelILFunction, op: str):
+    return {
+        "c": il.flag_condition(LowLevelILFlagCondition.LLFC_UGE),
+        "nc": il.flag_condition(LowLevelILFlagCondition.LLFC_ULT),
+        "z": il.flag_condition(LowLevelILFlagCondition.LLFC_E),
+        "nz": il.flag_condition(LowLevelILFlagCondition.LLFC_NE),
+        "lt": il.flag_condition(LowLevelILFlagCondition.LLFC_SLT),
+        "le": il.flag_condition(LowLevelILFlagCondition.LLFC_SLE),
+        "gt": il.flag_condition(LowLevelILFlagCondition.LLFC_SGT),
+        "ge": il.flag_condition(LowLevelILFlagCondition.LLFC_SGE),
+        "v": il.flag_condition(LowLevelILFlagCondition.LLFC_O),
+        "nv": il.flag_condition(LowLevelILFlagCondition.LLFC_NO),
+        "p": il.flag_condition(LowLevelILFlagCondition.LLFC_POS),
+        "m": il.flag_condition(LowLevelILFlagCondition.LLFC_NEG),
+    }[op]
 
 # LLIL branching util
 
@@ -267,7 +283,7 @@ def cp(instr, dat, addr):
         fn
     )
 
-def binop(op, il_op):
+def binop(op, il_op, flags = ""):
     def _fn(instr, dat, addr):
         txt, code, length = instr
         immdata = dat[len(code):]
@@ -285,7 +301,8 @@ def binop(op, il_op):
         if p_dst_r[1] is not None and p_src_r[1] is not None and p_dst_w[1] is not None:
             fn = [lambda il: il.append(p_dst_w[1](il, getattr(il, il_op)(p_dst_r[2], 
                 p_dst_r[1](il),
-                p_src_r[1](il)
+                p_src_r[1](il),
+                flags = flags if flags else None
             )))]
 
         return (
@@ -296,11 +313,11 @@ def binop(op, il_op):
 
     return _fn
 
-add = binop('ADD', 'add')
-sub = binop('SUB', 'sub')
-f_or = binop('OR', 'or_expr')
-f_and = binop('AND', 'and_expr')
-f_xor = binop('XOR', 'xor_expr')
+add = binop('ADD', 'add', flags="zcvn")
+sub = binop('SUB', 'sub', flags="zcvn")
+f_or = binop('OR', 'or_expr', flags="zn")
+f_and = binop('AND', 'and_expr', flags="zn")
+f_xor = binop('XOR', 'xor_expr', flags="zn")
 
 def ex(instr, dat, addr):
     txt, code, length = instr
@@ -346,7 +363,8 @@ def inc(instr, dat, addr):
     if p_dst_r[1] is not None and p_dst_w[1] is not None:
         fn = [lambda il: il.append(p_dst_w[1](il, il.add(p_dst_r[2], 
             p_dst_r[1](il),
-            il.const(p_dst_r[2], 1)
+            il.const(p_dst_r[2], 1),
+            flags="z",
         )))]
 
     return (
@@ -371,7 +389,8 @@ def dec(instr, dat, addr):
     if p_dst_r[1] is not None and p_dst_w[1] is not None:
         fn = [lambda il: il.append(p_dst_w[1](il, il.sub(p_dst_r[2], 
             p_dst_r[1](il),
-            il.const(p_dst_r[2], 1)
+            il.const(p_dst_r[2], 1),
+            flags="z",
         )))]
 
     return (
@@ -418,7 +437,7 @@ def jrl(instr, dat, addr):
         return (
             [tT('JRL'), tS(' '), tT(ops[0]), tS(', '), tA(hex(target), target)],
             info,
-            [lambda il: il_branch(il, il.flag(ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
+            [lambda il: il_branch(il, make_condition(il, ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
         )
 
 def jrs(instr, dat, addr):
@@ -466,7 +485,7 @@ def jrs(instr, dat, addr):
         return (
             [tT('JRS'), tS(' '), tT(ops[0]), tS(', '), tA(hex(target), target)],
             info,
-            [lambda il: il_branch(il, il.flag(ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
+            [lambda il: il_branch(il, make_condition(il, ops[0].lower()), il.const_pointer(2, target), il.const_pointer(2, addr + length))]
         )
 
 def djr(instr, dat, addr):
