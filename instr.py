@@ -104,6 +104,29 @@ def set_op(op, immdata, addr):
         return ([
             tM('['), tN(hex(r), r), tE(']')
         ], fn)
+    elif op == '[HL]':
+        return ([
+            tM('['), tR('HL'), tE(']')
+        ], lambda il, v: il.store(1, il.reg(2, 'HL'), v))
+    elif op == '[IX]':
+        return ([
+            tM('['), tR('IX'), tE(']')
+        ], lambda il, v: il.store(1, il.reg(2, 'IX'), v))
+    elif op == '[IY]':
+        return ([
+            tM('['), tR('IY'), tE(']')
+        ], lambda il, v: il.store(1, il.reg(2, 'IY'), v))
+    elif op == '[SP+{0}h]':
+        v = immdata[0]
+        return ([
+            tM('['), tR('SP'), tS('+'), tN(hex(v), v), tE(']'),
+        ], lambda il, vv: il.store(1, 
+            il.add(2,
+                il.reg(2, 'SP'),
+                il.const(2, v)
+            ),
+            vv
+        ), 1)
     else:
         return ([tT(op)], None)
 
@@ -135,6 +158,28 @@ def load_op(op, immdata, addr):
                 il.const(2, v)
             )
         ), 1)
+    elif op == '[SP+{0}h]':
+        v = immdata[0]
+        return ([
+            tM('['), tR('SP'), tS('+'), tN(hex(v), v), tE(']'),
+        ], lambda il: il.load(1, 
+            il.add(2,
+                il.reg(2, 'SP'),
+                il.const(2, v)
+            )
+        ), 1)
+    elif op == '[HL]':
+        return ([
+            tM('['), tR('HL'), tE(']')
+        ], lambda il: il.load(1, il.reg(2, 'HL')), 1)
+    elif op == '[IX]':
+        return ([
+            tM('['), tR('IX'), tE(']')
+        ], lambda il: il.load(1, il.reg(2, 'IX')), 1)
+    elif op == '[IY]':
+        return ([
+            tM('['), tR('IY'), tE(']')
+        ], lambda il: il.load(1, il.reg(2, 'IY')), 1)
     else:
         return ([tT(op)], lambda il: il.const(1,0), 1)
 
@@ -157,6 +202,168 @@ def load(instr, dat, addr):
 
     return (
         [tT('LD'), tS(' '), *p_dst[0], tS(', '), *p_src[0]],
+        info,
+        fn
+    )
+
+def cp(instr, dat, addr):
+    txt, code, length = instr
+    immdata = dat[len(code):]
+
+    info = InstructionInfo()
+    info.length = length
+
+    dst, src = txt.split()[1].split(',')
+
+    p_dst_r = load_op(dst, immdata, addr)
+    p_src_r = load_op(src, immdata, addr)
+
+    fn = None
+    if p_dst_r[1] is not None and p_src_r[1] is not None:
+        fn = [lambda il: il.append(il.compare_equal(p_dst_r[2], 
+            p_dst_r[1](il),
+            p_src_r[1](il)
+        ))]
+
+    return (
+        [tT('CP'), tS(' '), *p_dst_r[0], tS(', '), *p_src_r[0]],
+        info,
+        fn
+    )
+
+def binop(op, il_op):
+    def _fn(instr, dat, addr):
+        txt, code, length = instr
+        immdata = dat[len(code):]
+
+        info = InstructionInfo()
+        info.length = length
+
+        dst, src = txt.split()[1].split(',')
+
+        p_dst_w = set_op(dst, immdata, addr)
+        p_dst_r = load_op(dst, immdata, addr)
+        p_src_r = load_op(src, immdata, addr)
+
+        fn = None
+        if p_dst_r[1] is not None and p_src_r[1] is not None and p_dst_w[1] is not None:
+            fn = [lambda il: il.append(p_dst_w[1](il, getattr(il, il_op)(p_dst_r[2], 
+                p_dst_r[1](il),
+                p_src_r[1](il)
+            )))]
+
+        return (
+            [tT(op), tS(' '), *p_dst_w[0], tS(', '), *p_src_r[0]],
+            info,
+            fn
+        )
+
+    return _fn
+
+add = binop('ADD', 'add')
+sub = binop('SUB', 'sub')
+f_or = binop('OR', 'or_expr')
+f_and = binop('AND', 'and_expr')
+f_xor = binop('XOR', 'xor_expr')
+
+# def add(instr, dat, addr):
+#     txt, code, length = instr
+#     immdata = dat[len(code):]
+
+#     info = InstructionInfo()
+#     info.length = length
+
+#     dst, src = txt.split()[1].split(',')
+
+#     p_dst_w = set_op(dst, immdata, addr)
+#     p_dst_r = load_op(dst, immdata, addr)
+#     p_src_r = load_op(src, immdata, addr)
+
+#     fn = None
+#     if p_dst_r[1] is not None and p_src_r[1] is not None and p_dst_w[1] is not None:
+#         fn = [lambda il: il.append(p_dst_w[1](il, il.add(p_dst_r[2], 
+#             p_dst_r[1](il),
+#             p_src_r[1](il)
+#         )))]
+
+#     return (
+#         [tT('ADD'), tS(' '), *p_dst_w[0], tS(', '), *p_src_r[0]],
+#         info,
+#         fn
+#     )
+
+# def sub(instr, dat, addr):
+#     txt, code, length = instr
+#     immdata = dat[len(code):]
+
+#     info = InstructionInfo()
+#     info.length = length
+
+#     dst, src = txt.split()[1].split(',')
+
+#     p_dst_w = set_op(dst, immdata, addr)
+#     p_dst_r = load_op(dst, immdata, addr)
+#     p_src_r = load_op(src, immdata, addr)
+
+#     fn = None
+#     if p_dst_r[1] is not None and p_src_r[1] is not None and p_dst_w[1] is not None:
+#         fn = [lambda il: il.append(p_dst_w[1](il, il.sub(p_dst_r[2], 
+#             p_dst_r[1](il),
+#             p_src_r[1](il)
+#         )))]
+
+#     return (
+#         [tT('SUB'), tS(' '), *p_dst_w[0], tS(', '), *p_src_r[0]],
+#         info,
+#         fn
+#     )
+
+def inc(instr, dat, addr):
+    txt, code, length = instr
+    immdata = dat[len(code):]
+
+    info = InstructionInfo()
+    info.length = length
+
+    dst = txt.split()[1]
+
+    p_dst_w = set_op(dst, immdata, addr)
+    p_dst_r = load_op(dst, immdata, addr)
+
+    fn = None
+    if p_dst_r[1] is not None and p_dst_w[1] is not None:
+        fn = [lambda il: il.append(p_dst_w[1](il, il.add(p_dst_r[2], 
+            p_dst_r[1](il),
+            il.const(p_dst_r[2], 1)
+        )))]
+
+    return (
+        [tT('INC'), tS(' '), *p_dst_w[0]],
+        info,
+        fn
+    )
+
+def dec(instr, dat, addr):
+    txt, code, length = instr
+    immdata = dat[len(code):]
+
+    info = InstructionInfo()
+    info.length = length
+
+    dst = txt.split()[1]
+
+    p_dst_w = set_op(dst, immdata, addr)
+    p_dst_r = load_op(dst, immdata, addr)
+
+    fn = None
+    if p_dst_r[1] is not None and p_dst_w[1] is not None:
+        fn = [lambda il: il.append(p_dst_w[1](il, il.sub(p_dst_r[2], 
+            p_dst_r[1](il),
+            il.const(p_dst_r[2], 1)
+        )))]
+
+    return (
+        [tT('DEC'), tS(' '), *p_dst_w[0]],
         info,
         fn
     )
@@ -249,6 +456,19 @@ def carl(instr, dat, addr):
         [lambda il: il_jump(il, il.const_pointer(2, target), is_call=True)]
     )
 
+def ret(instr, dat, addr):
+    txt, code, length = instr
+
+    info = InstructionInfo()
+    info.length = length
+    info.add_branch(BranchType.FunctionReturn)
+
+    return (
+        [tT('RET')],
+        info,
+        [lambda il: il.append(il.ret(il.pop(2)))]
+    )
+
 def rete(instr, dat, addr):
     txt, code, length = instr
 
@@ -276,6 +496,44 @@ def push(instr, dat, addr):
         [tT('PUSH'), tS(' '), *p_op[0]],
         info,
         [lambda il: il.append(il.push(p_op[2], p_op[1](il)))]
+    )
+
+def pop(instr, dat, addr):
+    txt, code, length = instr
+    immdata = dat[len(code):]
+
+    op = txt.split()[1]
+
+    info = InstructionInfo()
+    info.length = length
+
+    sz = 0
+    if op in REGS_1:
+        sz = 1
+    elif op in REGS_2:
+        sz = 2
+    else:
+        return None
+
+    return (
+        [tT('POP'), tS(' '), tR(op)],
+        info,
+        [lambda il: il.append(il.set_reg(sz, op, il.pop(sz)))]
+    )
+
+def mlt(instr, dat, addr):
+    txt, code, length = instr
+
+    info = InstructionInfo()
+    info.length = length
+
+    return (
+        [tT('MLT')],
+        info,
+        [lambda il: il.append(il.set_reg(2, 'HL', il.mult(2,
+            il.zero_extend(2, il.reg(1, 'A')),
+            il.zero_extend(2, il.reg(1, 'L')),
+        )))]
     )
 
 def decode(dat, addr):
@@ -308,8 +566,19 @@ def decode(dat, addr):
     elif op == 'JRL': return jrl(instr, dat, addr)
     elif op == 'JRS': return jrs(instr, dat, addr)
     elif op == 'CARL': return carl(instr, dat, addr)
+    elif op == 'RET': return ret(instr, dat, addr)
     elif op == 'RETE': return rete(instr, dat, addr)
     elif op == 'PUSH': return push(instr, dat, addr)
+    elif op == 'POP': return pop(instr, dat, addr)
+    elif op == 'MLT': return mlt(instr, dat, addr)
+    elif op == 'ADD': return add(instr, dat, addr)
+    elif op == 'SUB': return sub(instr, dat, addr)
+    elif op == 'AND': return f_and(instr, dat, addr)
+    elif op == 'OR': return f_or(instr, dat, addr)
+    elif op == 'XOR': return f_xor(instr, dat, addr)
+    elif op == 'INC': return inc(instr, dat, addr)
+    elif op == 'DEC': return dec(instr, dat, addr)
+    elif op == 'CP': return cp(instr, dat, addr)
 
     return ([tT(txt)], info, None)
 
